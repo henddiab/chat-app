@@ -1,0 +1,42 @@
+<div class="chat-header">Chat Room</div>
+<div class="chat-body">
+  <div *ngFor="let msg of messages">
+    <div class="message" [ngClass]="{'own': msg.own, 'other': !msg.own}">
+      <ng-container [ngSwitch]="msg.type">
+        <p *ngSwitchCase="'text'">{{ msg.content }}</p>
+
+        <ng-container *ngSwitchCase="'file'">
+          <ng-container *ngIf="isImage(msg.filename)">
+            <img [src]="msg.content" style="max-width: 200px;" />
+          </ng-container>
+          <ng-container *ngIf="isVideo(msg.filename)">
+            <video [src]="msg.content" controls style="max-width: 200px;"></video>
+          </ng-container>
+          <ng-container *ngIf="isPdf(msg.filename)">
+            <a [href]="msg.content" target="_blank">📄 View PDF</a>
+          </ng-container>
+        </ng-container>
+
+        <p *ngSwitchDefault>{{msg.content}}</p>
+      </ng-container>
+    </div>
+  </div>
+</div>
+
+<div class="chat-footer">
+  <input type="text" [(ngModel)]="newMessage" placeholder="Type your message..." />
+  <button (click)="sendMessage()">Send</button>
+</div>
+
+<div class="chat-footer">
+  <input type="file" (change)="onFileSelected($event)" />
+  <button (click)="uploadFile()">Send File</button>
+</div>
+
+
+<!-- for test -->
+<div *ngIf="previewUrl" class="preview-section">
+  <img *ngIf="selectedFile?.type.startsWith('image')" [src]="previewUrl" />
+  <video *ngIf="selectedFile?.type.startsWith('video')" [src]="previewUrl" controls></video>
+  <a *ngIf="selectedFile?.type === 'application/pdf'" [href]="previewUrl" target="_blank">Preview PDF</a>
+</div>

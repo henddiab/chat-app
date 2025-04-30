@@ -1,0 +1,10 @@
+{
+    "/socket.io": {
+      "target": "https://api-stg.saaei.co",
+      "secure": false,
+      "changeOrigin": true,
+      "ws": true,
+      "logLevel": "debug"
+    }
+  }
+  
