@@ -32,6 +32,11 @@
   align-self: flex-start;
   background-color: #f1f3f5;
 }
+.chat-footer-wrapper {
+  position: fixed;
+  width: 100%;
+  bottom: 0;
+}
 
 .chat-footer {
   padding: 1rem;
@@ -39,6 +44,7 @@
   gap: 0.5rem;
   background-color: #fff;
   border-top: 1px solid #dee2e6;
+
 }
 
 .chat-footer input[type="text"] {
@@ -64,4 +70,38 @@
 .preview-section img,
 .preview-section video {
   max-width: 200px;
+}
+
+
+.sendBtn{
+  img{
+    width: 20px;
+    height: 20px;
+  }
+}
+.file-upload {
+  position: relative;
+  display: flex;
+
+  .upload-btn {
+    background-color: #4c6ef5;
+    color: white;
+    padding: 0.5rem 1rem;
+    border-radius: 8px;
+    img{
+      width: 20px;
+      height: 20px;
+      margin-inline-end: 10px;
+    }
+    display: flex;
+    justify-content: space-around;
+    align-items: center;
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+    font-weight: 500;
+
+    &:hover {
+      background-color: #3b5bdb;
+    }
+  }
 }

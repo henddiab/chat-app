@@ -22,16 +22,24 @@
     </div>
   </div>
 </div>
-
-<div class="chat-footer">
-  <input type="text" [(ngModel)]="newMessage" placeholder="Type your message..." />
-  <button (click)="sendMessage()">Send</button>
+<div class="chat-footer-wrapper">
+  <div class="chat-footer">
+    <input type="text" [(ngModel)]="newMessage" placeholder="Type your message..." />
+    <button class="sendBtn" (click)="sendMessage()"><img src="../../assets/send-email-svgrepo-com.svg" alt=""></button>
+  </div>
+  <div class="chat-footer file-upload">
+    <label for="fileInput" class="upload-btn">
+      <img src="../../assets/attachment-svgrepo-com.svg" alt="">
+      <span>
+        Attach File
+      </span>
+    </label>
+    <input type="file"     hidden
+   id="fileInput" (change)="onFileSelected($event)" />
+    <button class="sendBtn" (click)="uploadFile()"><img src="../../assets/send-email-svgrepo-com.svg" alt=""></button>
+  </div>
 </div>
 
-<div class="chat-footer">
-  <input type="file" (change)="onFileSelected($event)" />
-  <button (click)="uploadFile()">Send File</button>
-</div>
 
 
 <!-- for test -->

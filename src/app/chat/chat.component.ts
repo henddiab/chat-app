@@ -1,6 +1,6 @@
 /**
  * ChatComponent
- * 
+ *
  * This component handles the chat functionality, including sending text messages,
  * uploading files, and previewing selected files. It uses a socket service for real-time
  * communication.
@@ -51,6 +51,9 @@ export class ChatComponent implements OnInit {
    */
   ngOnInit() {
     this.socket.on("connect", () => console.log("connected"));
+    this.socket.on("newMessage", (history: any[]) => {
+      this.messages.push({ content: history });
+    });
   }
 
   /**
@@ -68,7 +71,7 @@ export class ChatComponent implements OnInit {
       });
 
       this.socket.on("newMessage", (history: any[]) => {
-        console.log(history);
+        this.messages.push({ content: history });
       });
     }
     this.newMessage = "";
