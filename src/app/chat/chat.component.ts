@@ -1,132 +1,225 @@
-/**
- * ChatComponent
- *
- * This component handles the chat functionality, including sending text messages,
- * uploading files, and previewing selected files. It uses a socket service for real-time
- * communication.
- */
-import { Component, OnInit } from "@angular/core";
+import { Component, OnInit, OnDestroy, ChangeDetectorRef } from "@angular/core";
 import { SocketService } from "../services/socket.service";
+import { Subscription } from 'rxjs';
 
 @Component({
   selector: "app-chat",
   templateUrl: "./chat.component.html",
   styleUrls: ["./chat.component.scss"],
 })
-export class ChatComponent implements OnInit {
+export class ChatComponent implements OnInit, OnDestroy {
   /**
    * Stores the list of chat messages.
+   * Each message contains metadata such as sender, recipient, content, and ownership (`own`).
    */
   messages: any[] = [];
 
   /**
-   * Stores the new message to be sent.
+   * Holds the content of the message currently being typed by the user.
    */
   newMessage = "";
 
   /**
-   * Stores the currently selected file for upload.
+   * Stores the file selected by the user for upload.
+   * If no file is selected, it is `null`.
    */
   selectedFile: File | null = null;
 
   /**
-   * Stores the preview URL of the selected file.
+   * Stores the preview URL of the selected file (if applicable).
+   * Used for displaying a preview of the file in the UI.
    */
   previewUrl: string | null = null;
 
   /**
-   * Stores the type of the selected file.
+   * Keeps track of all active RxJS subscriptions to ensure proper cleanup.
    */
-  fileType: string;
+  private subscriptions: Subscription[] = [];
 
   /**
-   * Constructor to inject the SocketService.
-   * @param socket - The socket service for real-time communication.
+   * Indicates whether the WebSocket connection is active (`true`) or not (`false`).
    */
-  constructor(private socket: SocketService) {}
+  isConnected = false;
 
   /**
-   * Lifecycle hook that is called after the component is initialized.
-   * Sets up the socket connection and listens for events.
+   * Constructor to inject dependencies.
+   * @param socket - An instance of `SocketService` for managing WebSocket communication.
+   * @param cdr - An instance of `ChangeDetectorRef` for manually triggering Angular's change detection.
+   */
+  constructor(private socket: SocketService, private cdr: ChangeDetectorRef) {}
+
+  /**
+   * Lifecycle hook that initializes the component.
+   * Establishes the WebSocket connection and sets up message listeners.
    */
   ngOnInit() {
-    this.socket.on("connect", () => console.log("connected"));
-    this.socket.on("newMessage", (history: any[]) => {
-      this.messages.push({ content: history });
-    });
+    console.log('Initializing chat component...');
+    this.initializeSocketConnection();
   }
 
   /**
-   * Sends a text message through the socket.
-   * Emits the message to the server and listens for new messages.
+   * Establishes a WebSocket connection using the `SocketService`.
+   * Subscribes to the connection status and requests message history if connected.
+   */
+  private initializeSocketConnection() {
+    this.subscriptions.push(
+      this.socket.getConnectionStatus().subscribe(
+        (connected) => {
+          console.log('Connection status:', connected);
+          this.isConnected = connected;
+          if (connected) {
+            this.requestMessageHistory();
+          }
+          this.cdr.detectChanges();
+        }
+      )
+    );
+
+    this.socket.connect()
+      .then(() => {
+        console.log('Socket connected successfully');
+        this.setupMessageListeners();
+      })
+      .catch(error => {
+        console.error('Socket connection failed:', error);
+      });
+  }
+
+  /**
+   * Sets up listeners for incoming messages from the server.
+   * - `messageList`: Receives the message history and updates the `messages` array.
+   * - `newMessage`: Listens for new messages and appends them to the `messages` array.
+   */
+  private setupMessageListeners() {
+    this.socket.on('messageList', (messages: any[]) => {
+      console.log('Received message history:', messages.length, 'messages');
+      this.messages = messages.map(msg => ({
+        ...msg,
+        own: msg.fromId === 'user2-id'
+      }));
+      this.cdr.detectChanges();
+    });
+
+    this.subscriptions.push(
+      this.socket.receive<any>('newMessage').subscribe({
+        next: (msg) => {
+          if (msg.toId === 'user-id' || msg.fromId === 'user2-id') {
+            console.log('New message received:', msg);
+            this.messages.push({
+              ...msg,
+              own: msg.fromId === 'user2-id' 
+            });
+            this.cdr.detectChanges();
+          }
+        },
+        error: (error) => {
+          console.error('Error receiving message:', error);
+        }
+      })
+    );
+  }
+
+  /**
+   * Sends a request to the server to retrieve the message history for the current user.
+   */
+  private requestMessageHistory() {
+    try {
+      this.socket.emit('getMessageList', {
+        userId: 'user-id',
+        fromId: 'user2-id'
+      });
+      console.log('Message history requested');
+    } catch (error) {
+      console.error('Error requesting message history:', error);
+    }
+  }
+
+  /**
+   * Sends a text message to the server via WebSocket.
+   * Updates the local `messages` array with the sent message.
    */
   sendMessage() {
+    if (!this.isConnected) {
+      console.error('Cannot send message: Socket not connected');
+      return;
+    }
+
     if (this.newMessage.trim()) {
-      this.socket.emit("hi", {
+      const messageData = {
         contactRequest: 4,
         dataType: "TEXT",
         content: this.newMessage,
-        toId: "user id",
-        fromId: "user2 id",
-      });
-
-      this.socket.on("newMessage", (history: any[]) => {
-        this.messages.push({ content: history });
-      });
+        toId: "user-id",
+        fromId: "user2-id",
+        own: true 
+      };
+      try {
+        const sent = this.socket.emit("newMessage", messageData);
+        if (sent) {
+          console.log('Message sent successfully:', messageData);
+          this.messages.push(messageData);  // Add message to local array
+          this.newMessage = "";
+          this.cdr.detectChanges();
+        }
+      } catch (error) {
+        console.error('Error sending message:', error);
+      }
     }
-    this.newMessage = "";
   }
 
   /**
-   * Handles the file selection event.
-   * Reads the selected file and generates a preview URL.
-   * @param event - The file input change event.
+   * Handles file uploads.
+   * Reads the selected file as a Base64 string, sends the file data to the server as a message,
+   * and updates the local `messages` array with the file message.
    */
-  onFileSelected(event: any) {
-    this.selectedFile = event.target.files[0];
+  uploadFile() {
+    if (!this.isConnected) {
+      console.error('Cannot upload file: Socket not connected');
+      return;
+    }
+
     if (this.selectedFile) {
       const reader = new FileReader();
-      reader.onload = () => (this.previewUrl = reader.result as string);
+      reader.onload = () => {
+        try {
+          const messageData = {
+            contactRequest: 4,
+            dataType: "FILE",
+            filename: this.selectedFile?.name,
+            content: reader.result,
+            toId: "user-id",
+            fromId: "user2-id",
+            own: true
+          };
+
+          const sent = this.socket.emit("newMessage", messageData);
+          if (sent) {
+            console.log('File uploaded successfully');
+            this.messages.push(messageData); // Add file message to local messages array
+            this.previewUrl = null;
+            this.selectedFile = null;
+            this.cdr.detectChanges();
+          }
+        } catch (error) {
+          console.error('Error uploading file:', error);
+        }
+      };
       reader.readAsDataURL(this.selectedFile);
     }
   }
 
   /**
-   * Determines the type of the selected file based on its MIME type.
-   * @param type - The MIME type of the file.
-   * @returns The file type as a string (e.g., "IMAGE", "VOICE", "VIDEO", "PDF").
+   * Handles file selection from the file input.
+   * Generates a preview URL for the selected file.
+   * @param event - The file input change event containing the selected file.
    */
-  checkFileType(type: string): string {
-    if (type.includes("image")) {
-      return "IMAGE";
-    }
-    if (type.includes("audio")) {
-      return "VOICE";
-    }
-    if (type.includes("video")) {
-      return "VIDEO";
-    }
-    if (type.includes("pdf")) {
-      return "PDF";
-    }
-  }
-
-  /**
-   * Uploads the selected file to the server.
-   * Emits the file data through the socket and resets the file-related properties.
-   */
-  uploadFile() {
+  onFileSelected(event: any) {
+    this.selectedFile = event.target.files[0];
     if (this.selectedFile) {
-      this.checkFileType(this.selectedFile.type);
       const reader = new FileReader();
       reader.onload = () => {
-        this.socket.emit("newMessage", {
-          type: this.checkFileType(this.selectedFile.type),
-          filename: this.selectedFile?.name,
-          content: reader.result,
-        });
-        this.previewUrl = null;
-        this.selectedFile = null;
+        this.previewUrl = reader.result as string;
+        this.cdr.detectChanges();
       };
       reader.readAsDataURL(this.selectedFile);
     }
@@ -134,8 +227,8 @@ export class ChatComponent implements OnInit {
 
   /**
    * Checks if the given filename corresponds to an image file.
-   * @param filename - The name of the file.
-   * @returns True if the file is an image, false otherwise.
+   * @param filename - The name of the file to check.
+   * @returns `true` if the file is an image, otherwise `false`.
    */
   isImage(filename: string): boolean {
     return /\.(jpg|jpeg|png|gif)$/i.test(filename);
@@ -143,8 +236,8 @@ export class ChatComponent implements OnInit {
 
   /**
    * Checks if the given filename corresponds to a video file.
-   * @param filename - The name of the file.
-   * @returns True if the file is a video, false otherwise.
+   * @param filename - The name of the file to check.
+   * @returns `true` if the file is a video, otherwise `false`.
    */
   isVideo(filename: string): boolean {
     return /\.(mp4|webm)$/i.test(filename);
@@ -152,10 +245,19 @@ export class ChatComponent implements OnInit {
 
   /**
    * Checks if the given filename corresponds to a PDF file.
-   * @param filename - The name of the file.
-   * @returns True if the file is a PDF, false otherwise.
+   * @param filename - The name of the file to check.
+   * @returns `true` if the file is a PDF, otherwise `false`.
    */
   isPdf(filename: string): boolean {
     return /\.pdf$/i.test(filename);
+  }
+
+  /**
+   * Lifecycle hook that cleans up resources when the component is destroyed.
+   * Unsubscribes from all active subscriptions and disconnects the WebSocket.
+   */
+  ngOnDestroy() {
+    this.subscriptions.forEach(sub => sub.unsubscribe());
+    this.socket.disconnect();
   }
 }
